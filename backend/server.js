@@ -101,27 +101,50 @@ const checkAdmin = (req, res, next) => {
 // Add this route to your server.js
 
 // Get registrations for a specific event
-app.get('/api/events/:id/registrations', authenticateToken, checkAdmin, async (req, res) => {
-  try {
-    const [registrations] = await db.query(`
-      SELECT 
-        r.*,
-        u.name as user_name,
-        u.email as user_email
-      FROM registrations r
-      JOIN users u ON r.user_id = u.id
-      WHERE r.event_id = ?
-      ORDER BY r.created_at DESC
-    `, [req.params.id]);
+app.get(
+  '/api/clubs/:clubId/events/:eventId/registrations',
+  authenticateToken,
+  checkAdmin,
+  async (req, res) => {
+    try {
+      const { clubId, eventId } = req.params;
 
-    res.json(registrations);
-  } catch (error) {
-    console.error('Event registrations error:', error);
-    res.status(500).json({ error: 'Failed to fetch registrations' });
+      // ✅ Ensure event belongs to this club
+      const [[event]] = await db.query(
+        'SELECT id FROM events WHERE id = ? AND club_id = ?',
+        [eventId, clubId]
+      );
+
+      if (!event) {
+        return res.status(404).json({
+          error: 'Event not found in this club'
+        });
+      }
+
+      // ✅ Fetch registrations
+      const [registrations] = await db.query(`
+        SELECT 
+          r.*,
+          u.name AS user_name,
+          u.email AS user_email
+        FROM registrations r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.event_id = ?
+        ORDER BY r.created_at DESC
+      `, [eventId]);
+
+      res.json(registrations);
+
+    } catch (error) {
+      console.error('Event registrations error:', error);
+      res.status(500).json({
+        error: 'Failed to fetch registrations'
+      });
+    }
   }
-});
+);
 
-app.patch('/api/events/:id', authenticateToken, checkAdmin, async (req, res) => {
+app.patch('/api/clubs/:clubId/events/:eventId', authenticateToken, checkAdmin, async (req, res) => {
   try {
     const { status } = req.body;
     if (!['upcoming', 'past'].includes(status)) {
@@ -158,6 +181,122 @@ app.get('/api/events/upcoming', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch upcoming events' });
   }
 });
+
+// club  description
+app.get('/api/clubs', authenticateToken,checkAdmin,async (req, res) => {
+  try {
+    const [clubs] = await db.query(
+      'SELECT id, name, description FROM clubs'
+    );
+
+    res.json(clubs);
+  } catch (error) {
+    console.error('Error fetching clubs:', error);
+    res.status(500).json({ error: 'Failed to fetch clubs' });
+  }
+});
+
+// create club
+app.post("/api/createclubs", authenticateToken, checkAdmin,async (req, res) => {
+  try {
+    const { name, description, password } = req.body;
+
+    // 1️⃣ Validate input
+    if (!name || !password) {
+      return res.status(400).json({
+        error: "Club name and password are required"
+      });
+    }
+
+    // 2️⃣ Check if club already exists
+    const [existing] = await db.query(
+      "SELECT id FROM clubs WHERE name = ?",
+      [name]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        error: "Club already exists"
+      });
+    }
+
+    // 3️⃣ Hash club password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 4️⃣ Insert into DB
+    await db.query(
+      "INSERT INTO clubs (name, description, password) VALUES (?, ?, ?)",
+      [name, description, hashedPassword]
+    );
+
+    // 5️⃣ Success
+    res.status(201).json({
+      message: "Club created successfully"
+    });
+
+  } catch (error) {
+    console.error("Create club error:", error);
+    res.status(500).json({
+      error: "Failed to create club"
+    });
+  }
+});
+
+// Club password verification route
+app.post("/api/clubs/verify", authenticateToken, checkAdmin,async (req, res) => {
+  const { clubId, password } = req.body;
+
+  const [rows] = await db.query(
+    "SELECT password FROM clubs WHERE id = ?",
+    [clubId]
+  );
+
+  if (!rows.length) {
+    return res.status(404).json({ error: "Club not found" });
+  }
+
+  const valid = await bcrypt.compare(password, rows[0].password);
+
+  if (!valid) {
+    return res.status(401).json({ error: "Invalid password" });
+  }
+
+  res.json({ success: true });
+});
+// 
+
+//club description
+app.get('/api/clubs/:clubId', authenticateToken, checkAdmin, async (req, res) => {
+  const { clubId } = req.params;
+
+  const [[club]] = await db.query(
+    "SELECT id, name, description FROM clubs WHERE id = ?",
+    [clubId]
+  );
+
+  res.json(club);
+});
+//
+
+// view events of only tht club
+// GET events of a specific club
+app.get("/api/clubs/:clubId/events",authenticateToken,async (req, res) => {
+    try {
+      const { clubId } = req.params;
+
+      const [events] = await db.query(
+        "SELECT * FROM events WHERE club_id = ? ORDER BY date DESC",
+        [clubId]
+      );
+
+      res.json(events);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch club events" });
+    }
+  }
+);
+
 
 // Get past events
 app.get('/api/events/past', authenticateToken, async (req, res) => {
@@ -393,6 +532,7 @@ app.use((req, res, next) => {
 
 // Login route
 app.post('/api/login', async (req, res) => {
+
   try {
     const { email, password } = req.body;
      
@@ -452,95 +592,79 @@ app.post('/api/login', async (req, res) => {
 
 // Events Routes
 // Add this route to get all events
-app.get('/api/events', authenticateToken, async (req, res) => {
-  try {
-    console.log('Fetching all events...'); // Debug log
-    
-    const [events] = await db.query(`
-      SELECT 
-        e.*,
-        COUNT(DISTINCT r.id) as registration_count,
-        u.name as created_by
-      FROM events e
-      LEFT JOIN registrations r ON e.id = r.event_id
-      LEFT JOIN users u ON e.created_by = u.id
-      GROUP BY e.id
-      ORDER BY e.date DESC
-    `);
+// GET events of a specific club (ADMIN)
+app.get(
+  '/api/clubs/:clubId/manageevents',
+  authenticateToken,
+  checkAdmin,
+  async (req, res) => {
+    try {
+      const clubId = Number(req.params.clubId);
 
-    console.log('Found events:', events.length);
-    res.json(events);
+      const [events] = await db.query(`
+        SELECT 
+          e.*,
+          COUNT(DISTINCT r.id) AS registration_count
+        FROM events e
+        LEFT JOIN registrations r ON e.id = r.event_id
+        WHERE e.club_id = ?
+        GROUP BY e.id
+        ORDER BY e.date DESC
+      `, [clubId]);
 
-  } catch (error) {
-    console.error('Events fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch events' });
+      res.json(events);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to fetch club events' });
+    }
   }
-});
+);
+
 
 // Modify your event creation endpoint to include created_by
-app.post('/api/events', authenticateToken, checkAdmin, async (req, res) => {
-  try {
-    const { 
-      title, 
-      description, 
-      date, 
-      type, 
-      venue, 
-      time,
-      coordinator_name, 
-      sponsors,
-      status 
-    } = req.body;
-
-    // Add created_by field
-    const [result] = await db.query(`
-      INSERT INTO events (
-        title, 
-        description, 
-        date, 
-        event_type, 
-        venue, 
+app.post(
+  "/api/clubs/:clubId/addevents",
+  authenticateToken,
+  checkAdmin,
+  async (req, res) => {
+    try {
+      const { clubId } = req.params;
+      const {
+        title,
+        description,
+        date,
+        venue,
         time,
-        coordinator_name, 
-        sponsors,
-        status,
-        created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      title, 
-      description, 
-      date, 
-      type, 
-      venue, 
-      time,
-      coordinator_name || null, 
-      sponsors || null,
-      status || 'upcoming',
-      req.user.id // Add the admin's user ID
-    ]);
+        status
+      } = req.body;
 
-    res.status(201).json({ 
-      id: result.insertId,
-      title,
-      description,
-      date,
-      type,
-      venue,
-      time,
-      coordinator_name,
-      sponsors,
-      status,
-      created_by: req.user.id
-    });
+      await db.query(
+        `INSERT INTO events 
+        (title, description, date, venue, time, status, club_id, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          title,
+          description,
+          date,
+          venue,
+          time,
+          status || "upcoming",
+          clubId,
+          req.user.id
+        ]
+      );
 
-  } catch (error) {
-    console.error('Event creation error:', error);
-    res.status(500).json({ error: 'Failed to create event' });
+      res.status(201).json({ message: "Event added under club" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to add event" });
+    }
   }
-});
+);
 
 
-app.delete('/api/events/:id', authenticateToken, checkAdmin, async (req, res) => {
+
+app.delete('/api/clubs/:clubId/events/:eventId', authenticateToken, checkAdmin, async (req, res) => {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
