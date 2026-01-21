@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import API from '../../services/api';
+import { useParams } from "react-router-dom";
 
 const AddEvent = () => {
+   const { clubId } = useParams(); 
   const [eventData, setEventData] = useState({
     title: '',
     description: '',
@@ -15,7 +17,7 @@ const AddEvent = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-
+ 
   const handleChange = (e) => {
     setEventData({ 
       ...eventData, 
@@ -31,7 +33,8 @@ const AddEvent = () => {
     setLoading(true);
 
     try {
-      const response = await API.post('/events', eventData);
+      const response = await API.post(`/clubs/${clubId}/addevents`, eventData );
+
       console.log('Event created:', response.data);
       setSuccess('Event added successfully!');
       setEventData({ title: '', description: '', date: '', type: '' });

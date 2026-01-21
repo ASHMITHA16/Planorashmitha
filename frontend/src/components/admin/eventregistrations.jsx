@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API from '../../services/api';
-
+import { useParams } from "react-router-dom";
 const EventRegistrations = () => {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -12,21 +12,26 @@ const EventRegistrations = () => {
     fetchEvents();
   }, []);
 
+  const { clubId } = useParams();
+ 
   const fetchEvents = async () => {
-    try {
-      const response = await API.get('/events');
-      setEvents(response.data);
-      setLoading(false);
-    } catch (error) {
-      setError('Failed to load events');
-      setLoading(false);
-    }
-  };
+  try {
+    setLoading(true);
+    const response = await API.get(`/clubs/${clubId}/events`);
+    setEvents(response.data);
+  } catch (error) {
+    setError('Failed to load events');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const fetchEventRegistrations = async (eventId) => {
     try {
       setLoading(true);
-      const response = await API.get(`/events/${eventId}/registrations`);
+      const response = await API.get(`/clubs/${clubId}/events/${eventId}/registrations`)
+
       setRegistrations(response.data);
       setSelectedEvent(events.find(event => event.id === eventId));
     } catch (error) {

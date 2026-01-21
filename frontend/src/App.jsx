@@ -13,6 +13,10 @@ import UpcomingEvents from './components/user/upcomingevents';
 import EventsList from './components/admin/EventsList';
 import DashboardHome from './components/admin/DashboardHome';
 import VerifyOtp from './components/admin/VerifyOtp';
+import ClubPasswordModal from './components/admin/ClubPasswordModal';
+import CreateClub from './components/admin/CreateClub';
+import ClubDashboard from './components/admin/ClubDashboard';
+import ClubEvents from './components/admin/ClubEvents';
 
 function App() {
   return (
@@ -33,10 +37,17 @@ function App() {
       {/* Admin Routes */}
       <Route path="/admin/*" element={<AdminDashboard />}>
         <Route index element={<DashboardHome />} />
-        <Route path="manage" element={<ManageEvents />} />
+        {/* <Route path="manage" element={<ManageEvents />} />
         <Route path="add" element={<AddEvent />} />
-        <Route path="registrations" element={<EventRegistrations />} />
+        <Route path="registrations" element={<EventRegistrations />} /> */}
+        <Route path="create-club" element={<CreateClub/>} />
       </Route>
+      <Route path="/admin/club/:clubId" element={<ClubDashboard />} />
+      <Route path="/admin/club/:clubId/add-event" element={<AddEvent />} />
+      <Route path="/admin/club/:clubId/manage-events" element={<ManageEvents />} />
+      <Route path="/admin/club/:clubId/registrations" element={<EventRegistrations />} />
+      <Route path="/admin/club/:clubId/events" element={<ClubEvents />}/>
+
     </Routes>
   );
 }

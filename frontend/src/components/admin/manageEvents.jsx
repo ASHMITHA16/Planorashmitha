@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API from '../../services/api';
-
+import { useParams } from "react-router-dom";
 const ManageEvents = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,12 +9,13 @@ const ManageEvents = () => {
   useEffect(() => {
     fetchEvents();
   }, []);
-
+ const { clubId } = useParams();
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const response = await API.get('/events');
+      const response = await API.get(`/clubs/${clubId}/manageevents`);
       setEvents(response.data);
+      
     } catch (error) {
       setError('Failed to fetch events');
       console.error('Error:', error);
@@ -27,7 +28,7 @@ const ManageEvents = () => {
   if (window.confirm('Are you sure you want to delete this event? This will also delete all registrations for this event.')) {
     try {
       setLoading(true);
-      await API.delete(`/events/${id}`);
+      await API.delete(`/clubs/${clubId}/events/${id}`);
       setEvents(events.filter(event => event.id !== id));
       alert('Event deleted successfully');
     } catch (error) {
@@ -41,7 +42,7 @@ const ManageEvents = () => {
 
   const updateStatus = async (id, newStatus) => {
     try {
-      await API.patch(`/events/${id}`, { status: newStatus });
+      await API.patch(`/clubs/${clubId}/events/${id}`, { status: newStatus });
       setEvents(events.map(event => 
         event.id === id ? { ...event, status: newStatus } : event
       ));
