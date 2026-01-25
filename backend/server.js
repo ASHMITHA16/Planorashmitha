@@ -62,6 +62,8 @@ const startServer = async () => {
 };
 
 
+
+
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
   try {
@@ -81,6 +83,7 @@ const authenticateToken = (req, res, next) => {
     res.status(500).json({ error: 'Authentication error' });
   }
 };
+
 
 // Role-based authorization middleware
 const checkAdmin = (req, res, next) => {
@@ -143,6 +146,20 @@ app.get(
     }
   }
 );
+
+
+app.get('/api/clubs/public', authenticateToken, async (req, res) => {
+  try {
+    const [clubs] = await db.query(
+      'SELECT id, name, description FROM clubs ORDER BY name'
+    );
+    res.json(clubs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch clubs' });
+  }
+});
+
 
 app.patch('/api/clubs/:clubId/events/:eventId', authenticateToken, checkAdmin, async (req, res) => {
   try {
@@ -239,6 +256,155 @@ app.post("/api/createclubs", authenticateToken, checkAdmin,async (req, res) => {
     res.status(500).json({
       error: "Failed to create club"
     });
+  }
+});
+
+
+// view club 
+// GET all clubs (public for users)
+
+
+// events
+// GET events of specific club
+app.get('/api/clubs/:clubId/basedevents', authenticateToken, async (req, res) => {
+  try {
+    const { clubId } = req.params;
+
+    const [events] = await db.query(
+      `SELECT * FROM events 
+       WHERE club_id = ? 
+       ORDER BY date DESC`,
+      [clubId]
+    );
+
+    res.json(events);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch club events' });
+  }
+});
+
+// event registrations
+// Register for FREE event
+app.post('/api/events/:id/eventregister', authenticateToken, async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const userId = req.user.id;
+
+    const [[event]] = await db.query(
+      'SELECT fee FROM events WHERE id = ?',
+      [eventId]
+    );
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    if (event.fee > 0) {
+      return res.status(400).json({ error: 'Payment required' });
+    }
+
+    // prevent duplicate registration
+    const [existing] = await db.query(
+      'SELECT id FROM registrations WHERE event_id = ? AND user_id = ?',
+      [eventId, userId]
+    );
+
+    if (existing.length) {
+      return res.status(400).json({ error: 'Already registered' });
+    }
+
+    await db.query(
+      `INSERT INTO registrations 
+       (event_id, user_id, payment_status) 
+       VALUES (?, ?, 'paid')`,
+      [eventId, userId]
+    );
+    console.log(`Inserted registration for user ${userId} and event ${eventId}`); // Debug log
+    await db.query('UPDATE events SET registration_count = registration_count + 1 WHERE id = ?', [eventId]);
+    
+    console.log(`User ${userId} registered for free event ${eventId}`); // Debug log
+
+
+    
+    res.json({ message: 'Registered successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// pay
+
+
+// CREATE FAKE PAYMENT
+app.post('/api/payments/fake/:eventId', authenticateToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.id;
+    const [[event]] = await db.query(
+      'SELECT fee FROM events WHERE id = ?',
+      [eventId]
+    );
+
+    if (!event || event.fee <= 0) {
+      return res.status(400).json({ error: 'Invalid paid event' });
+    }
+   const [existing] = await db.query(
+      'SELECT id FROM registrations WHERE event_id = ? AND user_id = ?',
+      [eventId, userId]
+    );
+
+    if (existing.length) {
+      return res.status(400).json({ error: 'Already registered' });
+    }
+
+    await db.query(
+      `INSERT INTO registrations
+       (event_id, user_id, payment_id, payment_status)
+       VALUES (?, ?, ?, 'paid')`,
+      [eventId, userId, paymentId]
+    );
+    res.json({
+      paymentId: "FAKE_PAY_" + Date.now(),
+      amount: event.fee,
+      message: "Proceed to fake payment"
+    });
+    console.log(`Initialized fake payment for event ${eventId}`); // Debug log
+  } catch (err) {
+    res.status(500).json({ error: 'Payment init failed' });
+  }
+});
+
+
+
+// Verify payment & register
+// VERIFY FAKE PAYMENT
+app.post('/api/payments/fake/verify', authenticateToken, async (req, res) => {
+  try {
+    const { eventId, paymentId } = req.body;
+    const userId = req.user.id;
+
+    // prevent duplicate registration
+    const [existing] = await db.query(
+      'SELECT id FROM registrations WHERE event_id = ? AND user_id = ?',
+      [eventId, userId]
+    );
+
+    if (existing.length) {
+      return res.status(400).json({ error: 'Already registered' });
+    }
+
+    await db.query(
+      `INSERT INTO registrations
+       (event_id, user_id, payment_id, payment_status)
+       VALUES (?, ?, ?, 'paid')`,
+      [eventId, userId, paymentId]
+    );
+
+    res.json({ message: 'Payment successful & registered' });
+  } catch (err) {
+    res.status(500).json({ error: 'Payment verification failed' });
   }
 });
 
@@ -635,13 +801,14 @@ app.post(
         date,
         venue,
         time,
-        status
+        status,
+        fee
       } = req.body;
 
       await db.query(
         `INSERT INTO events 
-        (title, description, date, venue, time, status, club_id, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (title, description, date, venue, time, status, club_id, created_by,fee)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)`,
         [
           title,
           description,
@@ -650,7 +817,8 @@ app.post(
           time,
           status || "upcoming",
           clubId,
-          req.user.id
+          req.user.id,
+          fee
         ]
       );
 
@@ -670,10 +838,9 @@ app.delete('/api/clubs/:clubId/events/:eventId', authenticateToken, checkAdmin, 
     await connection.beginTransaction();
 
     // First delete all registrations for this event
-    await connection.query('DELETE FROM registrations WHERE event_id = ?', [req.params.id]);
-    
+    await connection.query('DELETE FROM registrations WHERE event_id = ?', [req.params.eventId]);
     // Then delete the event
-    await connection.query('DELETE FROM events WHERE id = ?', [req.params.id]);
+    await connection.query('DELETE FROM events WHERE id = ? AND club_id = ?', [req.params.eventId, req.params.clubId]);
     
     await connection.commit();
     res.status(204).send();

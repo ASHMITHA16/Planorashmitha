@@ -18,6 +18,8 @@ import CreateClub from './components/admin/CreateClub';
 import ClubDashboard from './components/admin/ClubDashboard';
 import ClubEvents from './components/admin/ClubEvents';
 
+import Clubs from './components/user/Clubs';
+
 function App() {
   return (
     <Routes>
@@ -27,12 +29,10 @@ function App() {
       <Route path="/verify-otp" element={<VerifyOtp />} />
 
       {/* User Routes */}
-      <Route path="/user/*" element={<UserDashboard />}>
-        <Route path="upcoming" element={<UpcomingEvents />} />
-        <Route path="past" element={<PastEventDetails />} />
-        <Route path="events" element={<EventsList />} />
-        <Route path="register/:id" element={<Register />} />
-      </Route>
+      <Route path="/user" element={<UserDashboard />} />
+      <Route path="/user/club/:clubId" element={<Clubs />} />
+      <Route path="/user/register/:id" element={<Register />} />
+
 
       {/* Admin Routes */}
       <Route path="/admin/*" element={<AdminDashboard />}>

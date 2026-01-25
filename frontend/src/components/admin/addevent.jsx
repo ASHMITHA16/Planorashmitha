@@ -12,7 +12,8 @@ const AddEvent = () => {
     venue: '',
     coordinator_name: '',
     sponsors: '',
-    status: 'upcoming'
+    status: 'upcoming',
+    fee: ''
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -173,6 +174,19 @@ const AddEvent = () => {
         <textarea
           name="sponsors"
           value={eventData.sponsors}
+          onChange={handleChange}
+          className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Fee
+        </label>
+        <input
+          type="number"
+          name="fee"
+          value={eventData.fee}
           onChange={handleChange}
           className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
         />
