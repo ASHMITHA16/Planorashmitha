@@ -801,14 +801,27 @@ app.post(
         date,
         venue,
         time,
-        status,
-        fee
+        status
       } = req.body;
 
+      // 🔍 CHECK FOR VENUE CONFLICT
+      const [conflict] = await db.query(
+        `SELECT id FROM events
+         WHERE venue = ? AND date = ? AND time = ?`,
+        [venue, date, time]
+      );
+
+      if (conflict.length > 0) {
+        return res.status(400).json({
+          error: "Another event is already scheduled at this venue on the same date and time. Please change schedule."
+        });
+      }
+
+      // ✅ NO CONFLICT → INSERT EVENT
       await db.query(
         `INSERT INTO events 
-        (title, description, date, venue, time, status, club_id, created_by,fee)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)`,
+        (title, description, date, venue, time, status, club_id, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           title,
           description,
@@ -817,18 +830,19 @@ app.post(
           time,
           status || "upcoming",
           clubId,
-          req.user.id,
-          fee
+          req.user.id
         ]
       );
 
-      res.status(201).json({ message: "Event added under club" });
+      res.status(201).json({ message: "Event added successfully" });
+
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to add event" });
     }
   }
 );
+
 
 
 
