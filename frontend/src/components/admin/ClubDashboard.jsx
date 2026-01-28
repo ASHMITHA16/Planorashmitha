@@ -5,10 +5,11 @@ import API from "../../services/api";
 const ClubDashboard = () => {
   const { clubId } = useParams();
   const [club, setClub] = useState(null);
-
+ const{eventId}=useParams();
   useEffect(() => {
     API.get(`/clubs/${clubId}`)
       .then(res => setClub(res.data))
+      
       .catch(err => console.error(err));
   }, [clubId]);
 
@@ -47,7 +48,12 @@ const ClubDashboard = () => {
        >
            📅 View Events
         </Link>
-
+      <Link
+            to={`/admin/clubs/${clubId}/events/${eventId}/winners`}
+            className="bg-white p-6 rounded-xl shadow hover:shadow-lg"    
+        >
+            🏆 Manage Competitions
+        </Link>
       </div>
 
     </div>

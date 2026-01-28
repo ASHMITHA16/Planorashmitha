@@ -140,6 +140,18 @@ const AddEvent = () => {
         </div>
         
       <div>
+        <label className="flex items-center gap-2">
+       <input
+          type="checkbox"
+          name="is_competition"
+          checked={eventData.is_competition}
+          onChange={e => setEventData({...eventData, is_competition: e.target.checked})}
+     />
+        Is this a Competition?
+       </label>
+
+      </div>
+      <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Time
         </label>

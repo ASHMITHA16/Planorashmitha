@@ -8,7 +8,8 @@ import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import { body, validationResult } from 'express-validator';
 import sendOtpMail from './utils/sendOtpMail.js';
-
+import { generateCertificate } from "./utils/generateCertificate.js";
+import sendMail from "./utils/sendMail.js";
 
 
 dotenv.config();
@@ -93,6 +94,8 @@ const checkAdmin = (req, res, next) => {
   next();
 };
 
+
+
 // Auth routes
 // Get event details
 
@@ -128,7 +131,7 @@ app.get(
       const [registrations] = await db.query(`
         SELECT 
           r.*,
-          u.name AS user_name,
+          u.name AS name,
           u.email AS user_email
         FROM registrations r
         JOIN users u ON r.user_id = u.id
@@ -147,57 +150,20 @@ app.get(
   }
 );
 
+app.get("/api/clubs/:clubId/competition-events", authenticateToken, checkAdmin, async (req, res) => {
+  const { clubId } = req.params;
 
-app.get('/api/clubs/public', authenticateToken, async (req, res) => {
-  try {
-    const [clubs] = await db.query(
-      'SELECT id, name, description FROM clubs ORDER BY name'
-    );
-    res.json(clubs);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch clubs' });
-  }
+  const [events] = await db.query(
+    `SELECT id, title, date 
+     FROM events 
+     WHERE club_id = ? AND is_competition = TRUE
+     ORDER BY date DESC`,
+    [clubId]
+  );
+
+  res.json(events);
 });
 
-
-app.patch('/api/clubs/:clubId/events/:eventId', authenticateToken, checkAdmin, async (req, res) => {
-  try {
-    const { status } = req.body;
-    if (!['upcoming', 'past'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
-
-    await db.query(
-      'UPDATE events SET status = ? WHERE id = ?',
-      [status, req.params.id]
-    );
-
-    res.json({ message: 'Event status updated successfully' });
-  } catch (error) {
-    console.error('Event update error:', error);
-    res.status(500).json({ error: 'Failed to update event' });
-  }
-});
-app.get('/api/events/upcoming', authenticateToken, async (req, res) => {
-  try {
-    const [events] = await db.query(`
-      SELECT 
-        e.*,
-        COUNT(DISTINCT r.id) as registration_count
-      FROM events e
-      LEFT JOIN registrations r ON e.id = r.event_id
-      WHERE e.status = 'upcoming'
-      GROUP BY e.id
-      ORDER BY e.date ASC
-    `);
-
-    res.json(events);
-  } catch (error) {
-    console.error('Error fetching upcoming events:', error);
-    res.status(500).json({ error: 'Failed to fetch upcoming events' });
-  }
-});
 
 // club  description
 app.get('/api/clubs', authenticateToken,checkAdmin,async (req, res) => {
@@ -262,6 +228,18 @@ app.post("/api/createclubs", authenticateToken, checkAdmin,async (req, res) => {
 
 // view club 
 // GET all clubs (public for users)
+// Public route — NO login required
+app.get("/api/clubs/public", async (req, res) => {
+  try {
+    const [clubs] = await db.query(
+      "SELECT id, name, description FROM clubs ORDER BY name ASC"
+    );
+    res.json(clubs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch clubs" });
+  }
+});
 
 
 // events
@@ -820,8 +798,8 @@ app.post(
       // ✅ NO CONFLICT → INSERT EVENT
       await db.query(
         `INSERT INTO events 
-        (title, description, date, venue, time, status, club_id, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (title, description, date, venue, time, status, club_id, created_by,is_competition)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)`,
         [
           title,
           description,
@@ -830,7 +808,8 @@ app.post(
           time,
           status || "upcoming",
           clubId,
-          req.user.id
+          req.user.id,
+          req.body.is_competition || false
         ]
       );
 
@@ -843,6 +822,19 @@ app.post(
   }
 );
 
+app.get("/api/clubs/:clubId/events/:eventId/winners", async (req,res)=>{
+  const { eventId } = req.params;
+
+  const [winners] = await db.query(`
+    SELECT u.name, r.position
+    FROM registrations r
+    JOIN users u ON r.user_id=u.id
+    WHERE r.event_id=? AND r.position IN ('winner','runner')`,
+    [eventId]
+  );
+
+  res.json(winners);
+});
 
 
 
@@ -870,6 +862,25 @@ app.delete('/api/clubs/:clubId/events/:eventId', authenticateToken, checkAdmin, 
     connection.release();
   }
 });
+
+app.patch("/api/clubs/:clubId/registrations/:id/position", authenticateToken, checkAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { position } = req.body; // winner / runner
+
+  const [[reg]] = await db.query("SELECT event_id FROM registrations WHERE id=?", [id]);
+
+  // Remove previous winner/runner
+  await db.query(
+    "UPDATE registrations SET position='participant' WHERE event_id=? AND position=?",
+    [reg.event_id, position]
+  );
+
+  await db.query("UPDATE registrations SET position=? WHERE id=?", [position, id]);
+
+  res.json({ message: "Position updated" });
+});
+
+
 
 app.get('/api/admin/dashboard', authenticateToken, checkAdmin, async (req, res) => {
   try {
@@ -1043,6 +1054,34 @@ app.post('/api/events/:id/register', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+
+app.post("/api/clubs/:clubId/events/:eventId/send-certificates", authenticateToken, checkAdmin, async (req,res)=>{
+  const { eventId } = req.params;
+
+  const [[event]] = await db.query("SELECT title FROM events WHERE id=?", [eventId]);
+
+  const [participants] = await db.query(`
+    SELECT r.id, r.position, u.name, u.email
+    FROM registrations r
+    JOIN users u ON r.user_id=u.id
+    WHERE r.event_id=?`, [eventId]);
+
+  for(const p of participants){
+    const certPath = await generateCertificate(p.name, event.title, p.position);
+    await sendMail(p.email, p.name, event.title, p.position, certPath);
+
+    await db.query(
+      "UPDATE registrations SET certificate_sent=TRUE, certificate_path=? WHERE id=?",
+      [certPath, p.id]
+    );
+  }
+
+  await db.query("UPDATE events SET results_declared=TRUE WHERE id=?", [eventId]);
+
+  res.json({ message: "Certificates sent & results declared" });
+});
+
 
 // Update registrations route
 app.get('/api/registrations', authenticateToken, async (req, res) => {

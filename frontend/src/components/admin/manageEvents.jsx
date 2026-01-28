@@ -23,6 +23,8 @@ const ManageEvents = () => {
       setLoading(false);
     }
   };
+ 
+
 
  const deleteEvent = async (id) => {
   if (window.confirm('Are you sure you want to delete this event? This will also delete all registrations for this event.')) {
@@ -95,6 +97,7 @@ const ManageEvents = () => {
                 >
                   Delete Event
                 </button>
+
               </div>
             </div>
           </div>

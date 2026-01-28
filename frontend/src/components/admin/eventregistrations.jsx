@@ -26,6 +26,7 @@ const EventRegistrations = () => {
   }
 };
 
+  
 
   const fetchEventRegistrations = async (eventId) => {
     try {
@@ -114,6 +115,7 @@ const EventRegistrations = () => {
               </tbody>
             </table>
           </div>
+
         </div>
       )}
     </div>

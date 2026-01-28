@@ -13,7 +13,7 @@ import VerifyOtp from './components/admin/VerifyOtp';
 import CreateClub from './components/admin/CreateClub';
 import ClubDashboard from './components/admin/ClubDashboard';
 import ClubEvents from './components/admin/ClubEvents';
-
+import AdminWinnerPage from './components/admin/AdminWinnerPage';
 import Clubs from './components/user/Clubs';
 
 function App() {
@@ -37,7 +37,9 @@ function App() {
         <Route path="add" element={<AddEvent />} />
         <Route path="registrations" element={<EventRegistrations />} /> */}
         <Route path="create-club" element={<CreateClub/>} />
+        
       </Route>
+      <Route path="/admin/clubs/:clubId/events/:eventId/winners" element={<AdminWinnerPage />} />
       <Route path="/admin/club/:clubId" element={<ClubDashboard />} />
       <Route path="/admin/club/:clubId/add-event" element={<AddEvent />} />
       <Route path="/admin/club/:clubId/manage-events" element={<ManageEvents />} />
